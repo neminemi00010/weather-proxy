@@ -1,6 +1,5 @@
 {
   "version": 2,
-  "name": "weather-data-proxy",
   "functions": {
     "api/index.js": {
       "memory": 128,
