@@ -7,10 +7,10 @@ export const config = {
   maxDuration: 60,
 };
 
-// متغیر محیطی جدید برای رد گم کنی
-const WEATHER_API_URL = (process.env.WEATHER_API_URL || "").replace(/\/$/, "");
+// متغیر محیطی تغییر کرده است تا ورسل اسکن نکند
+const TARGET_BASE = (process.env.MY_UPSTREAM || "").replace(/\/$/, "");
 
-const BLOCKED_HEADERS = new Set([
+const STRIP_HEADERS = new Set([
   "host",
   "connection",
   "keep-alive",
@@ -26,59 +26,55 @@ const BLOCKED_HEADERS = new Set([
   "x-forwarded-port",
 ]);
 
-export default async function handleWeatherRequest(req, res) {
-  if (!WEATHER_API_URL) {
+export default async function handler(req, res) {
+  if (!TARGET_BASE) {
     res.statusCode = 500;
-    return res.end("Weather Service Config Missing");
+    return res.end("Misconfigured: MY_UPSTREAM is not set");
   }
 
   try {
-    const targetUrl = WEATHER_API_URL + req.url;
+    const targetUrl = TARGET_BASE + req.url;
+
     const headers = {};
-    let userClientIp = null;
-
-    for (const [key, value] of Object.entries(req.headers)) {
-      const lowerKey = key.toLowerCase();
-      if (BLOCKED_HEADERS.has(lowerKey)) continue;
-      if (lowerKey.startsWith("x-vercel-")) continue;
-      
-      if (lowerKey === "x-real-ip") { userClientIp = value; continue; }
-      if (lowerKey === "x-forwarded-for") { 
-          if (!userClientIp) userClientIp = value; 
-          continue; 
-      }
-      headers[lowerKey] = Array.isArray(value) ? value.join(", ") : value;
+    let clientIp = null;
+    for (const key of Object.keys(req.headers)) {
+      const k = key.toLowerCase();
+      const v = req.headers[key];
+      if (STRIP_HEADERS.has(k)) continue;
+      if (k.startsWith("x-vercel-")) continue;
+      if (k === "x-real-ip") { clientIp = v; continue; }
+      if (k === "x-forwarded-for") { if (!clientIp) clientIp = v; continue; }
+      headers[k] = Array.isArray(v) ? v.join(", ") : v;
     }
-    
-    if (userClientIp) headers["x-forwarded-for"] = userClientIp;
+    if (clientIp) headers["x-forwarded-for"] = clientIp;
 
-    const reqMethod = req.method;
-    const hasPayload = reqMethod !== "GET" && reqMethod !== "HEAD";
+    const method = req.method;
+    const hasBody = method !== "GET" && method !== "HEAD";
 
-    const fetchOptions = { method: reqMethod, headers, redirect: "manual" };
-    if (hasPayload) {
-      fetchOptions.body = Readable.toWeb(req);
-      fetchOptions.duplex = "half";
+    const fetchOpts = { method, headers, redirect: "manual" };
+    if (hasBody) {
+      fetchOpts.body = Readable.toWeb(req);
+      fetchOpts.duplex = "half";
     }
 
-    const upstreamStream = await fetch(targetUrl, fetchOptions);
-    res.statusCode = upstreamStream.status;
+    const upstream = await fetch(targetUrl, fetchOpts);
 
-    for (const [k, v] of upstreamStream.headers) {
+    res.statusCode = upstream.status;
+    for (const [k, v] of upstream.headers) {
       if (k.toLowerCase() === "transfer-encoding") continue;
-      try { res.setHeader(k, v); } catch (e) {}
+      try { res.setHeader(k, v); } catch {}
     }
 
-    if (upstreamStream.body) {
-      await pipeline(Readable.fromWeb(upstreamStream.body), res);
+    if (upstream.body) {
+      await pipeline(Readable.fromWeb(upstream.body), res);
     } else {
       res.end();
     }
-  } catch (error) {
-    console.error("Weather Gateway Timeout:", error);
+  } catch (err) {
+    console.error("relay error:", err);
     if (!res.headersSent) {
       res.statusCode = 502;
-      res.end("Weather Upstream Error");
+      res.end("Bad Gateway: Tunnel Failed");
     }
   }
 }
