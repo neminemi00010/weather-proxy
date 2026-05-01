@@ -1,0 +1,11 @@
+{
+  "name": "weather-data-proxy",
+  "version": "1.0.0",
+  "description": "Proxy service for fetching remote weather data streams",
+  "main": "api/index.js",
+  "scripts": {
+    "start": "node api/index.js"
+  },
+  "author": "Open Weather Dev",
+  "license": "MIT"
+}
