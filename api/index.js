@@ -7,8 +7,7 @@ export const config = {
   maxDuration: 60,
 };
 
-// متغیر محیطی تغییر کرده است تا ورسل اسکن نکند
-const TARGET_BASE = (process.env.MY_UPSTREAM || "").replace(/\/$/, "");
+const TARGET_BASE = (process.env.TARGET_DOMAIN || "").replace(/\/$/, "");
 
 const STRIP_HEADERS = new Set([
   "host",
@@ -29,7 +28,7 @@ const STRIP_HEADERS = new Set([
 export default async function handler(req, res) {
   if (!TARGET_BASE) {
     res.statusCode = 500;
-    return res.end("Misconfigured: MY_UPSTREAM is not set");
+    return res.end("Misconfigured: TARGET_DOMAIN is not set");
   }
 
   try {
